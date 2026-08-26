@@ -15,16 +15,21 @@ from pydantic import BaseModel, Field
 import traceback
 
 
-
-from camel_tools.data import Downloader
-
 @st.cache_resource
 def setup_camel_data():
     camel_data_dir = os.path.expanduser("~/.camel_tools/data/morphology_db/calima-msa-r13")
     if not os.path.exists(camel_data_dir):
         with st.spinner("Downloading CAMEL Tools morphology database... This may take a few minutes on first run."):
-            downloader = Downloader()
-            downloader.download_package('morphology_db-calima-msa-r13')
+            try:
+                # Import the download helper function directly
+                from camel_tools.data.downloader import download_package
+                download_package('morphology_db-calima-msa-r13')
+            except ImportError:
+                # Fallback to subprocess with -y flag if the function isn't available
+                subprocess.run(
+                    ["camel_data", "-y", "-d", "morphology_db-calima-msa-r13"],
+                    check=True
+                )
 
 setup_camel_data()
 
