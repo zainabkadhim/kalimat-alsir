@@ -6,6 +6,7 @@ import datetime
 import nltk
 import json
 import os
+import subprocess
 from nltk.corpus import stopwords
 from sklearn.metrics import pairwise_distances
 from camel_tools.utils.dediac import dediac_ar
@@ -16,6 +17,20 @@ from pydantic import BaseModel, Field
 import traceback
 import smtplib
 from email.message import EmailMessage
+
+@st.cache_resource
+def setup_camel_data():
+    camel_data_dir = os.path.expanduser("~/.camel_tools/data/morphology_db/calima-msa-r13")
+    if not os.path.exists(camel_data_dir):
+        with st.spinner("Downloading CAMEL Tools morphology database... This may take a few minutes on first run."):
+            subprocess.run(["camel_data", "-d", "morphology_db-calima-msa-r13"], check=True)
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords')
+
+setup_camel_data()
+
 #1__________________________________________________________________________________________________________لعنة الألوان
 st.set_page_config(page_title="كلمة السر", page_icon="🔒", layout="centered")
 

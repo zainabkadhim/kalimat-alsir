@@ -1,0 +1,3 @@
+build-essential
+cmake
+p7zip-full
