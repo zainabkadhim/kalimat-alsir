@@ -5,4 +5,4 @@ camel-tools
 streamlit-extras
 google-genai
 pydantic
-nltk
+gdown
