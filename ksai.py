@@ -141,7 +141,11 @@ st.markdown("""
 
     /* توحيد اتجاه النصوص داخل الشريط الجانبي */
     section[data-testid="stSidebar"] .stMarkdown, 
-    section[data-testid="stSidebar"] .stButton {
+    section[data-testid="stSidebar"] .stButton,
+    section[data-testid="stSidebar"] [data-testid="stHeading"],
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3 {
         direction: rtl !important;
         text-align: right !important;
     }
