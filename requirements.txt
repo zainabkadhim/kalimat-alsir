@@ -1,7 +1,7 @@
 streamlit
 numpy
 scikit-learn
-camel-tools
+camel-tools==1.5.5
 streamlit-extras
 google-genai
 pydantic
