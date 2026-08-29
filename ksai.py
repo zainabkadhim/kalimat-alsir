@@ -509,7 +509,7 @@ if 'input_key' not in st.session_state:
 if not is_winner:
     spaces = "&nbsp;" * 173
     st.markdown(f'<p class="sub-title">عدد المحاولات : {len(st.session_state.guesses)} {spaces} {st.session_state.game_number} # </p>', unsafe_allow_html=True)
-    user_input = st.text_input("", placeholder="اكتب تخمينك هنا ...", key=f"guess_input_{st.session_state.input_key}")
+    user_input = st.text_input("", placeholder="اكتب تخمينك هنا", key=f"guess_input_{st.session_state.input_key}")
     
     if user_input:
         string = str(user_input.strip())
