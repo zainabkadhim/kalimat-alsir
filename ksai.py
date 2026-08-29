@@ -6,6 +6,7 @@ import datetime
 import json
 import os
 import subprocess
+import requests
 from sklearn.metrics import pairwise_distances
 from camel_tools.utils.dediac import dediac_ar
 from camel_tools.disambig.mle import MLEDisambiguator
@@ -17,7 +18,12 @@ import traceback
 
 @st.cache_resource
 def setup_camel_data():
-    
+    # Newer camel-tools versions require the -i/--install flag and a real
+    # catalog package name (the old "camel_data light" shortcut without -i
+    # is from an older CLI version and no longer works).
+    # disambig-mle-calima-msa-r13 pulls in its dependency
+    # (morphology-db-msa-r13) automatically, covering everything
+    # MLEDisambiguator.pretrained() needs.
     camel_data_dir = os.path.expanduser("~/.camel_tools/data/disambig_mle/calima-msa-r13")
     if not os.path.exists(camel_data_dir):
         with st.spinner("Downloading CAMEL Tools data... This may take a few minutes on first run."):
@@ -195,9 +201,60 @@ def get_base_word(word):
     return word
 
 #3________________________________________________________________________________________________________العقل المدبر
+
+# Persistent storage via Upstash Redis REST API, so the daily word and
+# word-history survive reboots/redeploys instead of living on the
+# container's local disk (which gets wiped every restart).
+# Set these two values in .streamlit/secrets.toml locally, and in your
+# Streamlit Cloud app's "Secrets" settings when deployed:
+#   UPSTASH_REDIS_REST_URL = "https://....upstash.io"
+#   UPSTASH_REDIS_REST_TOKEN = "...."
+UPSTASH_URL = st.secrets.get("UPSTASH_REDIS_REST_URL", os.environ.get("UPSTASH_REDIS_REST_URL", ""))
+UPSTASH_TOKEN = st.secrets.get("UPSTASH_REDIS_REST_TOKEN", os.environ.get("UPSTASH_REDIS_REST_TOKEN", ""))
+
+def _redis_command(*args, timeout=10):
+    if not UPSTASH_URL or not UPSTASH_TOKEN:
+        return None
+    resp = requests.post(
+        UPSTASH_URL,
+        headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"},
+        json=list(args),
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return resp.json().get("result")
+
+def get_daily_word_record():
+    """Returns (date_string, word) or (None, None) if nothing stored / storage unavailable."""
+    try:
+        raw = _redis_command("GET", "kalimat_alsir:daily_word")
+        if raw:
+            record = json.loads(raw)
+            return record.get("date"), record.get("word")
+    except Exception:
+        pass
+    return None, None
+
+def set_daily_word_record(today_date, word):
+    try:
+        _redis_command("SET", "kalimat_alsir:daily_word", json.dumps({"date": today_date, "word": word}))
+    except Exception:
+        pass
+
+def get_history():
+    try:
+        result = _redis_command("LRANGE", "kalimat_alsir:history", 0, -1)
+        return result or []
+    except Exception:
+        return []
+
+def append_history(word):
+    try:
+        _redis_command("RPUSH", "kalimat_alsir:history", word)
+    except Exception:
+        pass
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-daily_filename = os.path.join(BASE_DIR, "daily_word.txt")
-history_filename = os.path.join(BASE_DIR, "history.txt")
 
 secret_words_pool = [
      "منبه", "شاحن", "مجهر", "كمامة", "محفظة", "ستارة", 
@@ -229,16 +286,14 @@ def get_or_create_validated_daily_word(filtered_words, word_set=None, debug=Fals
 
     today_date = str(datetime.date.today())
 
-    if os.path.exists(daily_filename):
-        with open(daily_filename, "r", encoding="utf-8") as file:
-            saved_data = file.read().strip()
-            if saved_data.startswith(today_date) and "," in saved_data:
-                return saved_data.split(",")[1]
+    if not UPSTASH_URL or not UPSTASH_TOKEN:
+        st.sidebar.warning("⚠️ لم يتم إعداد التخزين الدائم (Upstash) — سيتم اختيار كلمة عشوائية عند كل إعادة تشغيل.")
 
-    past_words = []
-    if os.path.exists(history_filename):
-        with open(history_filename, "r", encoding="utf-8") as file:
-            past_words = [line.strip() for line in file.readlines() if line.strip()]
+    saved_date, saved_word = get_daily_word_record()
+    if saved_date == today_date and saved_word:
+        return saved_word
+
+    past_words = get_history()
 
     recent_words_string = ", ".join(past_words[-3:]) if past_words else "لا يوجد"
 
@@ -247,10 +302,8 @@ def get_or_create_validated_daily_word(filtered_words, word_set=None, debug=Fals
     def fallback_choice():
         available_backups = [w for w in secret_words_pool if w not in past_words and w in word_set]
         fallback_word = random.choice(available_backups if available_backups else list(filtered_words))
-        with open(daily_filename, "w", encoding="utf-8") as file:
-            file.write(f"{today_date},{fallback_word}")
-        with open(history_filename, "a", encoding="utf-8") as file:
-            file.write(f"{fallback_word}\n")
+        set_daily_word_record(today_date, fallback_word)
+        append_history(fallback_word)
         return fallback_word
 
     if not api_key:
@@ -274,7 +327,9 @@ def get_or_create_validated_daily_word(filtered_words, word_set=None, debug=Fals
             f"قاعدة حظر التكرار: يمنع تماماً اختيار أي كلمة من الكلمات السابقة: [{recent_words_string}]"
         )
 
-        
+        # NOTE: verify this model name is currently valid for your google-genai
+        # SDK version/account — an invalid model id will make every attempt
+        # below fail and silently fall through to the fallback word.
         model_name = "gemini-3.6-flash"
 
         while attempts < max_attempts:
@@ -294,18 +349,16 @@ def get_or_create_validated_daily_word(filtered_words, word_set=None, debug=Fals
             in_vocab = ai_word in word_set
             is_repeat = ai_word in past_words
 
-            
             if in_vocab and not is_repeat:
-                with open(daily_filename, "w", encoding="utf-8") as file:
-                    file.write(f"{today_date},{ai_word}")
-                with open(history_filename, "a", encoding="utf-8") as file:
-                    file.write(f"{ai_word}\n")
+                set_daily_word_record(today_date, ai_word)
+                append_history(ai_word)
                 return ai_word
             else:
                 reason = "مكررة" if is_repeat else "غير موجودة في قاعدة البيانات"
                 rejected.append((ai_word, reason))
 
-        
+        # Loop exhausted without success -> fall back instead of
+        # falling off the end of the function and returning None.
         if debug and rejected:
             st.sidebar.warning(f"تم رفض {len(rejected)} كلمة من الذكاء الاصطناعي، تم استخدام كلمة احتياطية.")
         return fallback_choice()
@@ -318,11 +371,8 @@ def get_or_create_validated_daily_word(filtered_words, word_set=None, debug=Fals
 
 
 def random_game():
-    past_words = []
-    if os.path.exists(history_filename):
-        with open(history_filename, "r", encoding="utf-8") as file:
-            past_words = [line.strip() for line in file.readlines() if line.strip()]
-            
+    past_words = get_history()
+
     if not past_words:
         past_words = secret_words_pool
         
@@ -403,7 +453,11 @@ with st.sidebar:
                 found_new = False
                 forbidden_prefixes = ('ال', 'وال', 'ب', 'لل', 'بال', "مال","م",'ف')
                 forbidden_suffixes = ('ه',"ان","ين","ون", 'ها', "ا",'هم', 'كن', 'كما','وا',"ات",'ي')
-                
+                # FIX: build candidates as (real_rank, word) pairs restricted to
+                # the top `limit` words FIRST, then filter by prefix/suffix/length.
+                # Previously the prefix/suffix filter was applied to the whole
+                # list before indexing, which shifted word positions so a
+                # "hint" could end up with a real rank far past `limit`.
                 candidates = [
                     (i + 1, w)
                     for i, w in enumerate(st.session_state.sorted_words_for_today[:limit])
@@ -455,7 +509,7 @@ if 'input_key' not in st.session_state:
 if not is_winner:
     spaces = "&nbsp;" * 173
     st.markdown(f'<p class="sub-title">عدد المحاولات : {len(st.session_state.guesses)} {spaces} {st.session_state.game_number} # </p>', unsafe_allow_html=True)
-    user_input = st.text_input("", placeholder="اكتب تخمينك هنا", key=f"guess_input_{st.session_state.input_key}")
+    user_input = st.text_input("", placeholder="اكتب تخمينك هنا ...", key=f"guess_input_{st.session_state.input_key}")
     
     if user_input:
         string = str(user_input.strip())
