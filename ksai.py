@@ -621,7 +621,7 @@ else:
     st.markdown("</div>", unsafe_allow_html=True)
     
     r = 0
-    for g in st.session_state.sorted_words_for_today[:300]:
+    for g in st.session_state.sorted_words_for_today[:299]:
         r = r+1
         color = "#74c69d" if r < 50 else "#40916c" if r < 150 else "#2d6a4f" if r < 300 else "#f2cf6f" if r < 800 else "#e89a51" if r < 1500 else "#e65a3e" if r < 2500 else "#c93e49" if r < 4000 else "#bf0f2a" if r < 6000 else "#750113"
         st.markdown(f"""
