@@ -18,12 +18,7 @@ import traceback
 
 @st.cache_resource
 def setup_camel_data():
-    # Newer camel-tools versions require the -i/--install flag and a real
-    # catalog package name (the old "camel_data light" shortcut without -i
-    # is from an older CLI version and no longer works).
-    # disambig-mle-calima-msa-r13 pulls in its dependency
-    # (morphology-db-msa-r13) automatically, covering everything
-    # MLEDisambiguator.pretrained() needs.
+    
     camel_data_dir = os.path.expanduser("~/.camel_tools/data/disambig_mle/calima-msa-r13")
     if not os.path.exists(camel_data_dir):
         with st.spinner("Downloading CAMEL Tools data... This may take a few minutes on first run."):
@@ -174,7 +169,7 @@ def load_game_assets():
     with open(pickle_path, 'rb') as f:
         data = pickle.load(f)
     
-    limit = 70000
+    limit = 50000
     raw_words = data['words'][:limit]
     raw_embeddings = data['embeddings'][:limit]
     
@@ -626,7 +621,7 @@ else:
     st.markdown("</div>", unsafe_allow_html=True)
     
     r = 0
-    for g in st.session_state.sorted_words_for_today[:10]:
+    for g in st.session_state.sorted_words_for_today[:6500]:
         r = r+1
         color = "#74c69d" if r < 50 else "#40916c" if r < 150 else "#2d6a4f" if r < 300 else "#f2cf6f" if r < 800 else "#e89a51" if r < 1500 else "#e65a3e" if r < 2500 else "#c93e49" if r < 4000 else "#bf0f2a" if r < 6000 else "#750113"
         st.markdown(f"""
