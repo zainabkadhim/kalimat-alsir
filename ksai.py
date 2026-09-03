@@ -197,13 +197,7 @@ def get_base_word(word):
 
 #3________________________________________________________________________________________________________العقل المدبر
 
-# Persistent storage via Upstash Redis REST API, so the daily word and
-# word-history survive reboots/redeploys instead of living on the
-# container's local disk (which gets wiped every restart).
-# Set these two values in .streamlit/secrets.toml locally, and in your
-# Streamlit Cloud app's "Secrets" settings when deployed:
-#   UPSTASH_REDIS_REST_URL = "https://....upstash.io"
-#   UPSTASH_REDIS_REST_TOKEN = "...."
+
 UPSTASH_URL = st.secrets.get("UPSTASH_REDIS_REST_URL", os.environ.get("UPSTASH_REDIS_REST_URL", ""))
 UPSTASH_TOKEN = st.secrets.get("UPSTASH_REDIS_REST_TOKEN", os.environ.get("UPSTASH_REDIS_REST_TOKEN", ""))
 
@@ -322,9 +316,7 @@ def get_or_create_validated_daily_word(filtered_words, word_set=None, debug=Fals
             f"قاعدة حظر التكرار: يمنع تماماً اختيار أي كلمة من الكلمات السابقة: [{recent_words_string}]"
         )
 
-        # NOTE: verify this model name is currently valid for your google-genai
-        # SDK version/account — an invalid model id will make every attempt
-        # below fail and silently fall through to the fallback word.
+       
         model_name = "gemini-3.6-flash"
 
         while attempts < max_attempts:
@@ -352,8 +344,7 @@ def get_or_create_validated_daily_word(filtered_words, word_set=None, debug=Fals
                 reason = "مكررة" if is_repeat else "غير موجودة في قاعدة البيانات"
                 rejected.append((ai_word, reason))
 
-        # Loop exhausted without success -> fall back instead of
-        # falling off the end of the function and returning None.
+        
         if debug and rejected:
             st.sidebar.warning(f"تم رفض {len(rejected)} كلمة من الذكاء الاصطناعي، تم استخدام كلمة احتياطية.")
         return fallback_choice()
@@ -448,11 +439,7 @@ with st.sidebar:
                 found_new = False
                 forbidden_prefixes = ('ال', 'وال', 'ب', 'لل', 'بال', "مال","م",'ف')
                 forbidden_suffixes = ('ه',"ان","ين","ون", 'ها', "ا",'هم', 'كن', 'كما','وا',"ات",'ي')
-                # FIX: build candidates as (real_rank, word) pairs restricted to
-                # the top `limit` words FIRST, then filter by prefix/suffix/length.
-                # Previously the prefix/suffix filter was applied to the whole
-                # list before indexing, which shifted word positions so a
-                # "hint" could end up with a real rank far past `limit`.
+               
                 candidates = [
                     (i + 1, w)
                     for i, w in enumerate(st.session_state.sorted_words_for_today[:limit])
