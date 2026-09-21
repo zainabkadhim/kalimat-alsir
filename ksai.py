@@ -169,7 +169,7 @@ def load_game_assets():
     with open(pickle_path, 'rb') as f:
         data = pickle.load(f)
     
-    limit = 50000
+    limit = 40000
     raw_words = data['words'][:limit]
     raw_embeddings = data['embeddings'][:limit]
     
